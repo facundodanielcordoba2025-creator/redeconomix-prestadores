@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'out',
   backgroundColor: '#D60000',
   server: {
-    url: 'https://www.redeconomix.com/redeconomix/prestadores/panel',
+    url: 'https://redeconomix-prestadores-ioep.vercel.app/redeconomix/prestadores/panel',
     cleartext: true
   },
   plugins: {
