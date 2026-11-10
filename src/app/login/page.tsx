@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Input } from "@/components/ui/input";
 import { useAuth, useFirestore, useUser } from '@/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Dialog, 
@@ -88,6 +88,40 @@ export default function UserLoginPage() {
   const handleRedirect = async (userData: any) => {
     let data = userData;
     
+    // Check if user is a linked employee (cajero, vendedor, preventista de un comercio)
+    if (auth?.currentUser?.email && firestore) {
+        try {
+            const empSnap = await getDocs(query(
+                collection(firestore, 'retailer_employees'),
+                where('email', '==', auth.currentUser.email.toLowerCase().trim()),
+                where('status', '==', 'active')
+            ));
+            if (!empSnap.empty) {
+                const empDoc = empSnap.docs[0].data();
+                const empRole = empDoc.role || 'cashier';
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('rex_role', empRole);
+                    localStorage.setItem('rex_session_active', '1');
+                    localStorage.setItem('rex_employee_session', JSON.stringify({
+                        id: empDoc.id || empSnap.docs[0].id,
+                        name: empDoc.name,
+                        dni: empDoc.dni,
+                        role: empRole,
+                        branchId: empDoc.branchId,
+                        retailerId: empDoc.retailerId
+                    }));
+                }
+                if (empRole === 'cashier' || empRole === 'cashier_warehouse') {
+                    router.push('/redeconomix/dashboard-negocio/control-ventas');
+                    toast({ title: `¡Hola ${empDoc.name}!`, description: 'Sesión iniciada en Modo Cajero.' });
+                    return;
+                }
+            }
+        } catch(e) {
+            console.error("Error verificando empleado vinculado en login:", e);
+        }
+    }
+
     // Priority check: Is this user an employee (preventista)?
     if (auth?.currentUser && firestore) {
         try {

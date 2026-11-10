@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, useUser, useDoc, useFirestore } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { doc, collection, query, where, getDocs } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { Loader2, User, LogOut } from "lucide-react";
 import { PrestadorBottomNav } from '@/components/prestador-bottom-nav';
@@ -45,6 +45,41 @@ export default function PrestadorDashboardLayout({
       router.push('/login'); // Or a specific provider login page
     }
   }, [isUserLoading, user, router]);
+
+  // Si es un empleado cajero vinculado, llevarlo a su panel de Caja de inmediato
+  useEffect(() => {
+    async function checkCashierEmployee() {
+      if (!firestore || !user?.email) return;
+      try {
+        const q = query(
+          collection(firestore, 'retailer_employees'),
+          where('email', '==', user.email.toLowerCase().trim()),
+          where('status', '==', 'active')
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const emp = snap.docs[0].data();
+          if (emp.role === 'cashier' || emp.role === 'cashier_warehouse') {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('rex_role', emp.role);
+              localStorage.setItem('rex_employee_session', JSON.stringify({
+                id: emp.id || snap.docs[0].id,
+                name: emp.name,
+                dni: emp.dni,
+                role: emp.role,
+                branchId: emp.branchId,
+                retailerId: emp.retailerId
+              }));
+            }
+            router.replace('/redeconomix/dashboard-negocio/control-ventas');
+          }
+        }
+      } catch (e) {
+        console.error("Error comprobando cajero en layout prestadores:", e);
+      }
+    }
+    checkCashierEmployee();
+  }, [firestore, user, router]);
 
   const handleLogout = async () => {
     if (auth) {
