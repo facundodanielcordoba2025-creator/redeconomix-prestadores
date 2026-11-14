@@ -51,18 +51,31 @@ jobs:
         working-directory: android
         run: ./gradlew bundleRelease
 
-      - name: 🔑 Firmar App Bundle (.AAB) de Producción
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
+      - name: 🔑 Firmar App Bundle de Producción
+        working-directory: android
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Firmando con Keystore de GitHub Secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass "$STORE_PASS" -keypass "$KEY_PASS" app/build/outputs/bundle/release/app-release.aab "$KEY_ALIAS"
+          else
+            echo "Firmando con Keystore dedicado generado..."
+            keytool -genkeypair -v -keystore release.keystore -alias redeconomix_prestadores -keyalg RSA -keysize 2048 -validity 10000 -storepass RedEconomiX2026! -keypass RedEconomiX2026! -dname "CN=RedEconomiX Prestadores, OU=RedEconomiX, O=RedEconomiX, L=Cordoba, ST=Cordoba, C=AR"
+            jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass RedEconomiX2026! -keypass RedEconomiX2026! app/build/outputs/bundle/release/app-release.aab redeconomix_prestadores
+          fi
+          cp app/build/outputs/bundle/release/app-release.aab app/build/outputs/bundle/release/app-release-signed.aab
+
+      - name: 🔐 Guardar Keystore de Firma
+        uses: actions/upload-artifact@v4
         with:
-          releaseDirectory: android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          name: RedEconomiX-Prestadores-Keystore
+          path: android/release.keystore
+          retention-days: 30
 
       - name: 🔗 Link de Descarga Rápida (Sin límites de GitHub)
         working-directory: android
@@ -93,9 +106,10 @@ jobs:
         continue-on-error: true
 
       - name: 🚀 Subir AAB de Producción Firmado
-        if: steps.sign_app.outputs.signedReleaseFile != ''
         uses: actions/upload-artifact@v4
         with:
           name: RedEconomiX-Prestadores-AAB-Production-Signed
-          path: ${{ steps.sign_app.outputs.signedReleaseFile }}
-          retention-days: 1
+          path: |
+            android/app/build/outputs/bundle/release/*signed*.aab
+            android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 7
